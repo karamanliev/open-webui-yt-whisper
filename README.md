@@ -6,4 +6,4 @@ Utilizes [Whisper-WebUI](https://github.com/jhj0517/Whisper-WebUI) to get the yo
 ### How it looks
 ![image](https://github.com/user-attachments/assets/dc89a6f3-c068-4a59-bd97-5f8cc09996d5)
 
-Add it to your OpenWebUI instance - https://openwebui.com/f/mindphuq/openrouter_stats_and_cost_tracking
+Add it to your OpenWebUI instance - [https://openwebui.com/f/mindphuq/openrouter_stats_and_cost_tracking](https://openwebui.com/f/mindphuq/whisperwebui_video_transcription)
