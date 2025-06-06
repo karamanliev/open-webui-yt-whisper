@@ -331,5 +331,4 @@ class Filter:
             return body
 
     def outlet(self, body: dict) -> None:
-        # This is where you manipulate model outputs.
         print(f"outlet called: {body}")
