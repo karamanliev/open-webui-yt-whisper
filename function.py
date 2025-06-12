@@ -112,6 +112,9 @@ class Filter:
             description="Select whisper model to use",
         )
 
+        pass
+
+    class UserValves(BaseModel):
         WHISPER_LANGUAGE: Literal[
             "Automatic Detection",
             "afrikaans",
@@ -218,6 +221,9 @@ class Filter:
             default="Automatic Detection",
             description="Select language for the transcription, or leave it to auto",
         )
+        TRANSLATE_TO_ENGLISH: bool = Field(
+            default=False, description="Translate the transcrition to english?"
+        )
         pass
 
     def __init__(self):
@@ -230,6 +236,10 @@ class Filter:
         __user__: Optional[dict] = None,
     ) -> dict:
         emitter = EventEmitter(__event_emitter__)
+
+        user_valves = __user__.get("valves")
+        if not user_valves:
+            user_valves = self.UserValves()
 
         print(f"inlet called: {body}")
         messages = body["messages"]
@@ -262,14 +272,16 @@ class Filter:
         )
         match = pattern.search(reqs.text)
         video_description = ""
+        vido_channel = ""
         if match:
             player_response = json.loads(match.group(1))
-            video_description = player_response.get("videoDetails", {}).get(
-                "shortDescription", ""
-            )
+            video_details = player_response.get("videoDetails", {})
+            video_description = video_details.get("shortDescription", "")
+            video_channel = video_details.get("author", "")
             print("Video description found:", video_description)
+            print("Channel name found:", video_channel)
         else:
-            print("No description found")
+            print("No description or channel name found")
 
         titleRE = re.compile("<title>(.+?)</title>")
         video_title = html.unescape(titleRE.search(reqs.text).group(1))
@@ -281,7 +293,8 @@ class Filter:
 
         try:
             SELECTED_WHISPER_MODEL = self.valves.WHISPER_MODEL
-            SELECTED_LANGUAGE = self.valves.WHISPER_LANGUAGE
+            SELECTED_LANGUAGE = user_valves.WHISPER_LANGUAGE
+            SELECTED_TRANSLATE = user_valves.TRANSLATE_TO_ENGLISH
 
             payload = json.dumps(
                 {
@@ -291,7 +304,7 @@ class Filter:
                         False,
                         SELECTED_WHISPER_MODEL,
                         SELECTED_LANGUAGE,
-                        False,
+                        SELECTED_TRANSLATE,
                         5,
                         -1,
                         0.6,
@@ -413,6 +426,7 @@ class Filter:
                 f"__YouTube Video Details:__\n"
                 f"URL: {video_url}\n"
                 f"Title: {video_title}\n"
+                f"Channel: {video_channel}\n"
                 f"Thumbnail: {video_thumbnail}\n"
                 f"Description: {video_description}\n\n"
                 f"__YouTube Video Transcript__:\n{final_text}"
