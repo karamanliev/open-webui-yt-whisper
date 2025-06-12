@@ -111,7 +111,6 @@ class Filter:
             default="deepdml--faster-whisper-large-v3-turbo-ct2",
             description="Select whisper model to use",
         )
-
         pass
 
     class UserValves(BaseModel):
@@ -278,10 +277,6 @@ class Filter:
             video_details = player_response.get("videoDetails", {})
             video_description = video_details.get("shortDescription", "")
             video_channel = video_details.get("author", "")
-            print("Video description found:", video_description)
-            print("Channel name found:", video_channel)
-        else:
-            print("No description or channel name found")
 
         titleRE = re.compile("<title>(.+?)</title>")
         video_title = html.unescape(titleRE.search(reqs.text).group(1))
@@ -384,7 +379,7 @@ class Filter:
                     elapsed = round(now - total_time, 2)
                     await emitter.emit(
                         status="transcribing",
-                        description=f"Transcribing {video_title} using {SELECTED_WHISPER_MODEL}.. {elapsed}s ",
+                        description=f"Transcribing {video_title} using {SELECTED_WHISPER_MODEL}.. {elapsed}s",
                         done=False,
                     )
 
