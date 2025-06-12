@@ -3,7 +3,7 @@ title: OpenWebUI YT Whisper Transcription
 description: Retrieves text and video meta from a provided YouTube URL by calling the Whisper-WebUI endpoint, then sends it back to the LLM.
 author: Hristo Karamanliev
 author_url: https://github.com/karamanliev
-version: 1.0.0
+version: 1.2.0
 """
 
 import re
