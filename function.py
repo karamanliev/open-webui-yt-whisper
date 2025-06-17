@@ -3,21 +3,18 @@ title: OpenWebUI YT Whisper Transcription
 description: Retrieves text and video meta from a provided YouTube URL by calling the Whisper-WebUI endpoint, then sends it back to the LLM.
 author: Hristo Karamanliev
 author_url: https://github.com/karamanliev
-version: 1.2.0
+version: 1.3.0
 """
 
 import re
 import json
 import requests
-from pydantic import BaseModel, Field
-from open_webui.utils.chat import generate_chat_completion
-from open_webui.utils.misc import get_last_user_message
-from typing import Callable, Awaitable, Any, Optional, Literal
-import asyncio
-import sys
 import time
 import html
-
+import os
+from pydantic import BaseModel, Field
+from open_webui.utils.misc import get_last_user_message
+from typing import Callable, Awaitable, Any, Optional, Literal
 
 class EventEmitter:
     def __init__(self, event_emitter: Callable[[dict], Any] = None):
@@ -110,6 +107,10 @@ class Filter:
         ] = Field(
             default="deepdml--faster-whisper-large-v3-turbo-ct2",
             description="Select whisper model to use",
+        )
+        CACHE_DIR: str = Field(
+            default="./transcription_cache",
+            description="Directory to store cached transcriptions",
         )
         pass
 
@@ -228,6 +229,9 @@ class Filter:
     def __init__(self):
         self.valves = self.Valves()
 
+    def _get_cache_filename(self, video_id):
+        return f"{video_id}.txt"
+
     async def inlet(
         self,
         body: dict,
@@ -240,16 +244,22 @@ class Filter:
         if not user_valves:
             user_valves = self.UserValves()
 
-        print(f"inlet called: {body}")
+        # print("===== INLET =====", json.dumps(body, indent=4))
+
         messages = body["messages"]
         user_message = get_last_user_message(messages)
 
-        # Check if message contains YouTube URL
         youtube_match = re.search(
             r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})", user_message
         )
         if not youtube_match:
             return body
+
+        original_text = re.sub(
+            r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[A-Za-z0-9_-]{11}",
+            "",
+            user_message,
+        ).strip()
 
         video_id = youtube_match.group(1)
         video_thumbnail = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
@@ -263,6 +273,59 @@ class Filter:
                 done=True,
             )
             return body
+
+        # Create cache directory if it doesn't exist
+        cache_dir = self.valves.CACHE_DIR
+        os.makedirs(cache_dir, exist_ok=True)
+
+        # Generate cache filename
+        cache_filename = self._get_cache_filename(
+            video_id
+        )
+        cache_filepath = os.path.join(cache_dir, cache_filename)
+
+        # Check if cache exists
+        message_to_cache = None
+        if os.path.exists(cache_filepath):
+            await emitter.emit(description=f"Loading cached transcription for video {video_id}")
+
+            try:
+                with open(cache_filepath, "r", encoding="utf-8") as f:
+                    message_to_cache = f.read()
+
+                # Extract the transcript from the cached combined_message
+                transcript_match = re.search(r"## YouTube Video Transcript:\n(.*)", message_to_cache, re.DOTALL)
+                final_text = transcript_match.group(1) if transcript_match else ""
+
+                # Extract the video title from the cached data
+                title_match = re.search(r"- Title: (.*)\n", message_to_cache)
+                video_title = title_match.group(1) if title_match else "YouTube Video"
+
+                await emitter.emit(
+                    status="complete",
+                    description=f"Loaded cached transcription for {video_title}",
+                    done=True,
+                )
+
+                await emitter.emit_source(
+                    name=video_title, link=video_url, content=final_text
+                )
+
+                combined_message = (
+                    f"## Original User Message:\n"
+                        f"{original_text}\n\n"
+                        f"{message_to_cache}"
+                ).strip()
+
+                messages[-1]["content"] = combined_message
+                body["messages"] = messages
+                # print("===== CACHE HIT =====", json.dumps(body, indent=4))
+                return body
+
+            except Exception as e:
+                await emitter.emit(
+                    description=f"Error loading cache, proceeding with transcription: {str(e)}"
+                )
 
         reqs = requests.get(video_url)
 
@@ -409,23 +472,31 @@ class Filter:
                 name=video_title, link=video_url, content=final_text
             )
 
-            original_text = re.sub(
-                r"(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[A-Za-z0-9_-]{11}",
-                "",
-                user_message,
+            message_to_cache = (
+                f"## YouTube Video Details:\n"
+                f"- URL: {video_url}\n"
+                f"- Title: {video_title}\n"
+                f"- Channel: {video_channel}\n"
+                f"- Thumbnail: {video_thumbnail}\n"
+                f"- Description:\n```\n{video_description}\n```\n"
+                f"---\n\n"
+                f"## YouTube Video Transcript:\n{final_text}"
             ).strip()
 
             combined_message = (
-                f"__Original User Message:__\n"
-                f"{original_text}\n\n"
-                f"__YouTube Video Details:__\n"
-                f"URL: {video_url}\n"
-                f"Title: {video_title}\n"
-                f"Channel: {video_channel}\n"
-                f"Thumbnail: {video_thumbnail}\n"
-                f"Description: {video_description}\n\n"
-                f"__YouTube Video Transcript__:\n{final_text}"
+                f"## Original User Message:\n"
+                f"{original_text}\n"
+                f"---\n\n"
+                f"{message_to_cache}"
             ).strip()
+
+            # Save to cache
+            try:
+                with open(cache_filepath, "w", encoding="utf-8") as f:
+                    f.write(message_to_cache)
+                print(f"Saved transcription to cache: {cache_filepath}")
+            except Exception as e:
+                print(f"Failed to save cache: {str(e)}")
 
             messages[-1]["content"] = combined_message
             body["messages"] = messages
@@ -448,4 +519,4 @@ class Filter:
             return body
 
     def outlet(self, body: dict) -> None:
-        print(f"outlet called: {body}")
+        # print("===== OUTLET =====", json.dumps(body, indent=4))
