@@ -518,5 +518,5 @@ class Filter:
             )
             return body
 
-    def outlet(self, body: dict) -> None:
+    # def outlet(self, body: dict) -> None:
         # print("===== OUTLET =====", json.dumps(body, indent=4))
