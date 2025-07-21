@@ -91,22 +91,52 @@ class Filter:
             default=False,
             description="Bypass cached transcriptions and force re-transcription",
         )
-        LANGUAGE: Optional[Literal[
-            "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca", "cs",
-            "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu",
-            "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja", "jw", "ka",
-            "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml",
-            "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
-            "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su", "sv", "sw",
-            "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo",
-            "yue", "zh"
-        ]] = Field(
-            default=None,
-            description="Language for transcription (Auto detect if not specified)",
+        LANGUAGE: Literal[
+            "Auto detect",
+            "Afrikaans", "Albanian", "Amharic", "Arabic", "Armenian", "Assamese", "Azerbaijani",
+            "Bashkir", "Basque", "Belarusian", "Bengali", "Bosnian", "Breton", "Bulgarian",
+            "Cantonese", "Catalan", "Chinese", "Croatian", "Czech", "Danish", "Dutch", "English",
+            "Estonian", "Faroese", "Finnish", "French", "Galician", "Georgian", "German", "Greek",
+            "Gujarati", "Haitian", "Hausa", "Hawaiian", "Hebrew", "Hindi", "Hungarian", "Icelandic",
+            "Indonesian", "Italian", "Japanese", "Javanese", "Kannada", "Kazakh", "Khmer", "Korean",
+            "Lao", "Latin", "Latvian", "Lingala", "Lithuanian", "Luxembourgish", "Macedonian",
+            "Malagasy", "Malay", "Malayalam", "Maltese", "Maori", "Marathi", "Mongolian", "Myanmar",
+            "Nepali", "Norwegian", "Norwegian Nynorsk", "Occitan", "Pashto", "Persian", "Polish",
+            "Portuguese", "Punjabi", "Romanian", "Russian", "Sanskrit", "Serbian", "Shona", "Sindhi",
+            "Sinhala", "Slovak", "Slovenian", "Somali", "Spanish", "Sundanese", "Swahili", "Swedish",
+            "Tagalog", "Tajik", "Tamil", "Tatar", "Telugu", "Thai", "Tibetan", "Turkish", "Turkmen",
+            "Ukrainian", "Urdu", "Uzbek", "Vietnamese", "Welsh", "Yiddish", "Yoruba"
+        ] = Field(
+            default="Auto detect",
+            description="Select language for transcription"
         )
 
     def __init__(self):
         self.valves = self.Valves()
+        self.LANGUAGE_MAP = {
+            "Auto detect": None,
+            "Afrikaans": "af", "Albanian": "sq", "Amharic": "am", "Arabic": "ar", "Armenian": "hy",
+            "Assamese": "as", "Azerbaijani": "az", "Bashkir": "ba", "Basque": "eu", "Belarusian": "be",
+            "Bengali": "bn", "Bosnian": "bs", "Breton": "br", "Bulgarian": "bg", "Cantonese": "yue",
+            "Catalan": "ca", "Chinese": "zh", "Croatian": "hr", "Czech": "cs", "Danish": "da",
+            "Dutch": "nl", "English": "en", "Estonian": "et", "Faroese": "fo", "Finnish": "fi",
+            "French": "fr", "Galician": "gl", "Georgian": "ka", "German": "de", "Greek": "el",
+            "Gujarati": "gu", "Haitian": "ht", "Hausa": "ha", "Hawaiian": "haw", "Hebrew": "he",
+            "Hindi": "hi", "Hungarian": "hu", "Icelandic": "is", "Indonesian": "id", "Italian": "it",
+            "Japanese": "ja", "Javanese": "jw", "Kannada": "kn", "Kazakh": "kk", "Khmer": "km",
+            "Korean": "ko", "Lao": "lo", "Latin": "la", "Latvian": "lv", "Lingala": "ln",
+            "Lithuanian": "lt", "Luxembourgish": "lb", "Macedonian": "mk", "Malagasy": "mg",
+            "Malay": "ms", "Malayalam": "ml", "Maltese": "mt", "Maori": "mi", "Marathi": "mr",
+            "Mongolian": "mn", "Myanmar": "my", "Nepali": "ne", "Norwegian": "no",
+            "Norwegian Nynorsk": "nn", "Occitan": "oc", "Pashto": "ps", "Persian": "fa",
+            "Polish": "pl", "Portuguese": "pt", "Punjabi": "pa", "Romanian": "ro", "Russian": "ru",
+            "Sanskrit": "sa", "Serbian": "sr", "Shona": "sn", "Sindhi": "sd", "Sinhala": "si",
+            "Slovak": "sk", "Slovenian": "sl", "Somali": "so", "Spanish": "es", "Sundanese": "su",
+            "Swahili": "sw", "Swedish": "sv", "Tagalog": "tl", "Tajik": "tg", "Tamil": "ta",
+            "Tatar": "tt", "Telugu": "te", "Thai": "th", "Tibetan": "bo", "Turkish": "tr",
+            "Turkmen": "tk", "Ukrainian": "uk", "Urdu": "ur", "Uzbek": "uz", "Vietnamese": "vi",
+            "Welsh": "cy", "Yiddish": "yi", "Yoruba": "yo"
+        }
 
     def _get_cache_filename(self, video_id):
         return f"{video_id}.txt"
@@ -227,7 +257,8 @@ class Filter:
             if not audio_path:
                 raise Exception("No audio file found after download")
 
-            language_text = f" in {user_valves.LANGUAGE}" if user_valves.LANGUAGE else ""
+            language_code = self.LANGUAGE_MAP.get(user_valves.LANGUAGE)
+            language_text = f" in {user_valves.LANGUAGE}" if language_code else ""
             await emitter.emit(description=f"Transcribing {video_title}{language_text}")
 
             asr_url = f"{self.valves.ASR_URL}/asr"
@@ -235,8 +266,8 @@ class Filter:
             with open(audio_path, "rb") as f:
                 files = {"audio_file": (os.path.basename(audio_path), f, "audio/wav")}
                 data = {}
-                if user_valves.LANGUAGE:
-                    data['language'] = user_valves.LANGUAGE
+                if language_code:
+                    data['language'] = language_code
 
                 response = requests.post(asr_url, files=files, data=data, timeout=300)
 
