@@ -9,6 +9,9 @@ Utilizes [Whisper ASR Webserver](https://github.com/ahmetoner/whisper-asr-webser
 ![image](https://github.com/user-attachments/assets/dc89a6f3-c068-4a59-bd97-5f8cc09996d5)
 
 ### CHANGELOG
+#### 1.1.0
+- added UserValve to specify the language for the transcription if autodetection fails
+
 #### 1.0.0
 - works the same as [WhisperWebUI Video Transcription](https://openwebui.com/f/mindphuq/whisperwebui_video_transcription)
 - added UserValve to bypass the cache when enabled

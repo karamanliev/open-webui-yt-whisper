@@ -17,8 +17,7 @@ import shutil
 import html
 from pydantic import BaseModel, Field
 from open_webui.utils.misc import get_last_user_message
-from typing import Callable, Awaitable, Any, Optional
-
+from typing import Callable, Awaitable, Any, Optional, Literal
 
 class EventEmitter:
     def __init__(self, event_emitter: Callable[[dict], Any] = None):
@@ -92,6 +91,19 @@ class Filter:
             default=False,
             description="Bypass cached transcriptions and force re-transcription",
         )
+        LANGUAGE: Optional[Literal[
+            "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca", "cs",
+            "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu",
+            "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja", "jw", "ka",
+            "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml",
+            "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
+            "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su", "sv", "sw",
+            "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yi", "yo",
+            "yue", "zh"
+        ]] = Field(
+            default=None,
+            description="Language for transcription (Auto detect if not specified)",
+        )
 
     def __init__(self):
         self.valves = self.Valves()
@@ -136,17 +148,13 @@ class Filter:
         cache_filepath = os.path.join(cache_dir, cache_filename)
 
         if os.path.exists(cache_filepath) and not user_valves.BYPASS_CACHE:
-            await emitter.emit(
-                description=f"Loading cached transcription for video {video_id}"
-            )
+            await emitter.emit(description=f"Loading cached transcription for video {video_id}")
 
             try:
                 with open(cache_filepath, "r", encoding="utf-8") as f:
                     message_to_cache = f.read()
 
-                transcript_match = re.search(
-                    r"## YouTube Video Transcript:\n(.*)", message_to_cache, re.DOTALL
-                )
+                transcript_match = re.search(r"## YouTube Video Transcript:\n(.*)", message_to_cache, re.DOTALL)
                 final_text = transcript_match.group(1) if transcript_match else ""
 
                 title_match = re.search(r"- Title: (.*)\n", message_to_cache)
@@ -158,9 +166,7 @@ class Filter:
                     done=True,
                 )
 
-                await emitter.emit_source(
-                    name=video_title, link=video_url, content=final_text
-                )
+                await emitter.emit_source(name=video_title, link=video_url, content=final_text)
 
                 combined_message = (
                     f"## Original User Message:\n"
@@ -206,11 +212,9 @@ class Filter:
             cmd = [
                 "yt-dlp",
                 "--extract-audio",
-                "--audio-format",
-                "wav",
-                "--output",
-                f"{temp_dir}/audio.%(ext)s",
-                video_url,
+                "--audio-format", "wav",
+                "--output", f"{temp_dir}/audio.%(ext)s",
+                video_url
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -223,19 +227,24 @@ class Filter:
             if not audio_path:
                 raise Exception("No audio file found after download")
 
-            await emitter.emit(description=f"Transcribing {video_title}")
+            language_text = f" in {user_valves.LANGUAGE}" if user_valves.LANGUAGE else ""
+            await emitter.emit(description=f"Transcribing {video_title}{language_text}")
 
             asr_url = f"{self.valves.ASR_URL}/asr"
 
             with open(audio_path, "rb") as f:
                 files = {"audio_file": (os.path.basename(audio_path), f, "audio/wav")}
-                response = requests.post(asr_url, files=files, timeout=300)
+                data = {}
+                if user_valves.LANGUAGE:
+                    data['language'] = user_valves.LANGUAGE
+
+                response = requests.post(asr_url, files=files, data=data, timeout=300)
 
                 if response.status_code == 500:
                     await emitter.emit(
                         status="error",
                         description=f"Server error (500): {response.text}. Check ASR service logs.",
-                        done=True,
+                        done=True
                     )
                     return body
 
@@ -252,7 +261,7 @@ class Filter:
                     await emitter.emit(
                         status="error",
                         description="No transcription text returned",
-                        done=True,
+                        done=True
                     )
                     return body
 
@@ -262,7 +271,7 @@ class Filter:
                     await emitter.emit(
                         status="error",
                         description="Invalid response format and no text content",
-                        done=True,
+                        done=True
                     )
                     return body
 
@@ -272,9 +281,7 @@ class Filter:
                 done=True,
             )
 
-            await emitter.emit_source(
-                name=video_title, link=video_url, content=final_text
-            )
+            await emitter.emit_source(name=video_title, link=video_url, content=final_text)
 
             message_to_cache = (
                 f"## YouTube Video Details:\n"
@@ -313,7 +320,9 @@ class Filter:
             return body
         except requests.RequestException as e:
             await emitter.emit(
-                status="error", description=f"ASR request failed: {str(e)}", done=True
+                status="error",
+                description=f"ASR request failed: {str(e)}",
+                done=True
             )
             return body
         except Exception as e:
